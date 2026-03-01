@@ -2,6 +2,8 @@
 
 A Python terminal application where AI agents with distinct specialist personas debate any topic you provide. Supports **Anthropic Claude**, **OpenAI GPT**, and **Google Gemini** as interchangeable backends, with a rich color-coded terminal UI built using the `rich` library.
 
+Agents can **search the internet in real time** (via [Tavily](https://tavily.com)) and cite their sources — every argument is grounded in live evidence, not just training data.
+
 ---
 
 ## What It Does
@@ -19,9 +21,10 @@ Number of specialist pairs [default 2]: 3
 The system then:
 1. Generates PRO and CON specialists across the most relevant dimensions of the topic (economic, ethical, political, etc.)
 2. Runs the debate with alternating turns, each agent making new claims and rebutting prior ones
-3. Inserts a neutral **Mediator** periodically to assess the state of the debate and ask probing questions
-4. Delivers a scored **Final Verdict** at the end
-5. Saves the full transcript to a `.json` file
+3. **Fetches live web evidence via Tavily before each turn**, so arguments are grounded in real sources
+4. Inserts a neutral **Mediator** periodically to assess the state of the debate and ask probing questions
+5. Delivers a scored **Final Verdict** at the end, also backed by cited sources
+6. Saves the full transcript (including citations) to a `.json` file
 
 ---
 
@@ -49,6 +52,11 @@ The system then:
 │                                                                           │
 │ 🎯 REBUTTING: claim_003 (Dr. Marcus Webb's patient safety claim)         │
 │ 📊 Confidence: ████████░░ 0.82                                           │
+│                                                                           │
+│ 🔗 SOURCES                                                                │
+│   [1] NEJM — UBI pilot outcomes in healthcare utilization                 │
+│       https://nejm.org/...                                                │
+│       "Participants showed a 14% reduction in ER visits..."               │
 ╰───────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -58,6 +66,7 @@ The system then:
 - **Claim ledger** — live table showing all claims, marked `STANDING` or `REBUTTED`
 - **Thinking blocks** — internal reasoning surfaced in dim italic (Anthropic and Gemini thinking models)
 - **Confidence bar** — each agent self-rates their argument quality
+- **Sources block** — clickable URLs for every source cited in the turn
 
 ---
 
@@ -66,7 +75,8 @@ The system then:
 ### 1. Prerequisites
 
 - Python 3.11+
-- An API key for your chosen provider (see [Supported Providers](#supported-providers))
+- An API key for your chosen LLM provider (see [Supported Providers](#supported-providers))
+- *(Optional)* A [Tavily](https://app.tavily.com) API key for live web search
 
 ### 2. Install dependencies
 
@@ -75,7 +85,7 @@ cd debate_system
 pip install -r requirements.txt
 ```
 
-> The requirements file includes `openai` and `google-generativeai`. If you only want one provider, you can install just the packages you need.
+> The requirements file includes `openai`, `google-generativeai`, and `tavily-python`. Install only the packages you need for your provider.
 
 ### 3. Configure your provider
 
@@ -83,7 +93,7 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Open `.env` and set your provider and API key:
+Open `.env` and set your provider and API keys:
 
 ```env
 # Pick one: anthropic | openai | gemini
@@ -92,6 +102,9 @@ LLM_PROVIDER=anthropic
 ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 GOOGLE_API_KEY=AIza...
+
+# Optional — enables live web search and source citations
+TAVILY_API_KEY=tvly-...
 ```
 
 ### 4. Run
@@ -99,6 +112,29 @@ GOOGLE_API_KEY=AIza...
 ```bash
 python main.py
 ```
+
+---
+
+## Web Search & Citations (Tavily)
+
+When `TAVILY_API_KEY` is set, every specialist and mediator call:
+
+1. **Searches the web** before generating its argument, using a domain-targeted query (e.g. `"Universal Basic Income Healthcare Economics"`)
+2. **Receives the top results** (title, URL, content snippet) as context injected into the prompt
+3. **Cites its sources** in structured JSON — the UI renders these as a `🔗 SOURCES` block under each argument
+4. **Saves citations** in the JSON transcript alongside the full debate
+
+The mediator uses separate searches for its mid-debate summaries (`"{topic} research evidence"`) and its final verdict (`"{topic} expert analysis conclusion"`).
+
+**Without a Tavily key**, the system runs exactly as before — agents argue from model training knowledge with no citations, and no errors are raised.
+
+### Tavily env vars
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TAVILY_API_KEY` | *(unset)* | API key from [app.tavily.com](https://app.tavily.com). Required to enable search. |
+| `SEARCH_ENABLED` | `true` | Set to `false` to disable search without removing the key |
+| `TAVILY_MAX_RESULTS` | `3` | Number of search results fetched per agent turn |
 
 ---
 
@@ -131,19 +167,20 @@ GEMINI_MODEL=gemini-1.5-pro
 
 ## Configuration
 
-Edit [`config.py`](config.py) to tune the system (all token/round defaults live here):
+Edit [`config.py`](debate_system/config.py) to tune the system (all token/round defaults live here):
 
 | Constant | Default | Description |
 |----------|---------|-------------|
-| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | Default Anthropic model (env override: `ANTHROPIC_MODEL`) |
-| `OPENAI_MODEL` | `gpt-4o` | Default OpenAI model (env override: `OPENAI_MODEL`) |
-| `GEMINI_MODEL` | `gemini-1.5-pro` | Default Gemini model (env override: `GEMINI_MODEL`) |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | Default Anthropic model |
+| `OPENAI_MODEL` | `gpt-4o` | Default OpenAI model |
+| `GEMINI_MODEL` | `gemini-1.5-pro` | Default Gemini model |
 | `THINKING_BUDGET` | `3000` | Token budget for extended thinking (Anthropic / Gemini thinking models) |
 | `DEFAULT_ROUNDS` | `6` | Default number of debate rounds |
 | `DEFAULT_SPECIALISTS` | `2` | Default number of specialist pairs |
 | `MEDIATOR_SUMMARY_INTERVAL` | `3` | How often the mediator intervenes (every N turns) |
 | `WARN_COMPLEXITY_THRESHOLD` | `20` | Warns if total turns exceed this |
 | `MAX_RETRIES` | `3` | API retry attempts with exponential backoff |
+| `TAVILY_MAX_RESULTS` | `3` | Search results fetched per agent turn |
 
 ---
 
@@ -165,8 +202,8 @@ debate_system/
 │
 ├── agents/
 │   ├── decomposer.py        # Generates all agent personas from the topic
-│   ├── specialist.py        # Runs one debate turn for a specialist
-│   ├── mediator.py          # Mid-debate summaries and final verdict
+│   ├── specialist.py        # Runs one debate turn; searches Tavily, cites sources
+│   ├── mediator.py          # Mid-debate summaries and final verdict; searches Tavily
 │   └── utils.py             # Shared transcript/claim formatting helpers
 │
 ├── debate/
@@ -174,15 +211,19 @@ debate_system/
 │   └── turn_selector.py     # Dynamic pro/con alternation and mediator scheduling
 │
 ├── models/
-│   └── schemas.py           # Pydantic models: Claim, DebateTurn, AgentPersona, etc.
+│   └── schemas.py           # Pydantic models: Citation, Claim, DebateTurn, AgentPersona, etc.
 │
 ├── prompts/
 │   ├── decomposer_prompt.py
-│   ├── specialist_prompt.py
-│   └── mediator_prompt.py
+│   ├── specialist_prompt.py # Includes {search_results} injection + citations in JSON schema
+│   └── mediator_prompt.py   # Includes {search_results} injection + citations in JSON schema
+│
+├── search/
+│   ├── __init__.py
+│   └── tavily.py            # TavilySearch client (disabled gracefully if no API key)
 │
 ├── ui/
-│   └── display.py           # All Rich terminal rendering
+│   └── display.py           # All Rich terminal rendering (panels, ledger, citations, verdict)
 │
 └── transcripts/             # Auto-created — JSON debate transcripts saved here
 ```
@@ -195,15 +236,17 @@ debate_system/
 
 2. **Turn Order** — Each round alternates PRO/CON speakers. After each turn, a lightweight routing call picks which opposing specialist is best positioned to respond, making the debate feel reactive.
 
-3. **Claim Ledger** — Every turn must register at least one new `Claim` (with a unique `claim_id`) and rebut at least one `[STANDING]` claim from the opposing side. This prevents parallel monologues.
+3. **Live Search** — Before generating each turn, the agent searches Tavily for domain-relevant evidence (e.g. `"UBI healthcare economics"`). Results are injected into the prompt as numbered source blocks. The agent weaves this evidence into its argument and explicitly cites what it used.
 
-4. **Extended Thinking** — When supported by the provider, internal reasoning is surfaced before each spoken argument. On Anthropic, this uses the native `thinking` parameter. On Gemini thinking models, thought blocks are extracted from the response parts. On standard OpenAI models, reasoning is not exposed.
+4. **Claim Ledger** — Every turn must register at least one new `Claim` (with a unique `claim_id`) and rebut at least one `[STANDING]` claim from the opposing side. This prevents parallel monologues.
 
-5. **Mediator Summaries** — Every `total_turns // 3` turns, the mediator intervenes with a structured analysis: state of debate, contested ground, weakest arguments, and a probing question.
+5. **Extended Thinking** — When supported by the provider, internal reasoning is surfaced before each spoken argument. On Anthropic, this uses the native `thinking` parameter. On Gemini thinking models, thought blocks are extracted from the response parts. On standard OpenAI models, reasoning is not exposed.
 
-6. **Final Verdict** — After all turns, the mediator scores every claim (1–5), identifies fatal weaknesses on each side, tracks confidence trajectories, and delivers a nuanced conclusion.
+6. **Mediator Summaries** — Every `total_turns // 3` turns, the mediator intervenes with a structured analysis: state of debate, contested ground, weakest arguments, and a probing question. The mediator also searches for current evidence to inform its assessment.
 
-7. **Transcript** — The full debate is saved to `transcripts/debate_transcript_<timestamp>.json`. If you press `Ctrl+C` mid-debate, a partial transcript is saved before exiting.
+7. **Final Verdict** — After all turns, the mediator scores every claim (1–5), identifies fatal weaknesses on each side, tracks confidence trajectories, and delivers a nuanced conclusion with its own cited sources.
+
+8. **Transcript** — The full debate is saved to `transcripts/debate_transcript_<timestamp>.json`, including all citations. If you press `Ctrl+C` mid-debate, a partial transcript is saved before exiting.
 
 ---
 
