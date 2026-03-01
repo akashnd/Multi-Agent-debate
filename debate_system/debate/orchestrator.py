@@ -11,6 +11,7 @@ from agents.specialist import SpecialistAgent
 from agents.mediator import MediatorAgent
 from debate.turn_selector import TurnSelector
 from ui.display import DebateDisplay
+from search.tavily import TavilySearch
 
 
 class DebateOrchestrator:
@@ -42,8 +43,10 @@ class DebateOrchestrator:
             mediator_summaries=[],
         )
 
-        self.specialist_agent = SpecialistAgent(client)
-        self.mediator_agent = MediatorAgent(client, mediator_persona)
+        # Shared searcher so all agents reuse the same Tavily client
+        searcher = TavilySearch()
+        self.specialist_agent = SpecialistAgent(client, searcher)
+        self.mediator_agent = MediatorAgent(client, mediator_persona, searcher)
         self.turn_selector = TurnSelector(agents, total_turns)
         self._interrupted = False
         self._setup_interrupt_handler()

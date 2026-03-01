@@ -4,6 +4,12 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+class Citation(BaseModel):
+    title: str
+    url: str
+    snippet: str = ""        # key quote or summary the agent drew on
+
+
 class Claim(BaseModel):
     claim_id: str                    # unique id e.g. "claim_001"
     agent_name: str                  # who made the claim
@@ -23,6 +29,7 @@ class DebateTurn(BaseModel):
     new_claims: list[Claim] = Field(default_factory=list)
     rebuttal_targets: list[str] = Field(default_factory=list)  # claim_ids this turn rebuts
     confidence: float = 0.5          # 0.0 to 1.0, agent's self-rated confidence this turn
+    citations: list[Citation] = Field(default_factory=list)    # sources cited this turn
 
 
 class AgentPersona(BaseModel):
@@ -59,6 +66,7 @@ class FinalVerdict(BaseModel):
     confidence_trajectory: str
     nuanced_conclusion: str
     verdict: str                     # which side had stronger case and why
+    citations: list[Citation] = Field(default_factory=list)  # sources supporting the verdict
 
 
 class DebateState(BaseModel):

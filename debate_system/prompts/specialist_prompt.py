@@ -21,16 +21,21 @@ Claims marked [STANDING] have not been challenged yet. Claims marked [REBUTTED] 
 === MEDIATOR'S LAST SUMMARY ===
 {last_mediator_summary}
 
+=== REAL-TIME SEARCH RESULTS (use these to ground your argument with actual evidence) ===
+{search_results}
+Cite any sources you rely on in the "citations" field of your JSON response.
+
 YOUR TASK THIS TURN:
 1. Make at least ONE new original argument from your specialist perspective (register it as a new claim)
 2. Directly rebut at least ONE [STANDING] claim from the opposing side (reference it by claim_id)
 3. Your personality must come through clearly in your argumentation style
 4. Rate your own confidence (0.0 to 1.0) for the quality of your argument this turn
+5. Cite any search results you used (title, url, and a brief snippet)
 
 Return ONLY valid JSON with this exact structure:
 {{
   "thinking": "your internal reasoning process before you speak — be candid about strategy, what's weak on the other side, what evidence you'll use",
-  "argument": "your spoken argument — substantive, in-character, specific, and pointed",
+  "argument": "your spoken argument — substantive, in-character, specific, and pointed. Weave in evidence from search results where relevant.",
   "new_claims": [
     {{
       "claim_id": "claim_XXX",
@@ -42,10 +47,14 @@ Return ONLY valid JSON with this exact structure:
     }}
   ],
   "rebuttal_targets": ["claim_id_1", "claim_id_2"],
-  "confidence": 0.0
+  "confidence": 0.0,
+  "citations": [
+    {{"title": "Source title", "url": "https://...", "snippet": "key quote or finding you relied on"}}
+  ]
 }}
 
 Use claim_ids in format "claim_XXX" where XXX is the next sequential number after the highest existing claim_id.
+If you did not use any search results, set "citations" to [].
 No markdown, no explanation. Return ONLY the JSON object."""
 
 ROUTER_PROMPT = """Given the last argument made in this debate, which specialist is best positioned to respond next?

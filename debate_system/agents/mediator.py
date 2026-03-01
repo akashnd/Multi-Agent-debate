@@ -2,20 +2,26 @@
 
 import json
 
-from config import MAX_VERDICT_TOKENS, MAX_SUMMARY_TOKENS
+from config import MAX_VERDICT_TOKENS, MAX_SUMMARY_TOKENS, TAVILY_MAX_RESULTS
 from llm.base import LLMClient
-from models.schemas import AgentPersona, DebateState, DebateTurn, MediatorSummary, FinalVerdict, ClaimScore
+from models.schemas import AgentPersona, DebateState, DebateTurn, MediatorSummary, FinalVerdict, ClaimScore, Citation
 from prompts.mediator_prompt import MEDIATOR_SYSTEM, MEDIATOR_SUMMARY_USER, MEDIATOR_VERDICT_USER
 from agents.utils import format_transcript, format_claim_ledger, format_summaries
+from search.tavily import TavilySearch
 
 
 class MediatorAgent:
-    def __init__(self, client: LLMClient, persona: AgentPersona):
+    def __init__(self, client: LLMClient, persona: AgentPersona, searcher: TavilySearch | None = None):
         self.client = client
         self.persona = persona
+        self.searcher = searcher if searcher is not None else TavilySearch()
 
     def generate_summary_as_turn(self, state: DebateState) -> DebateTurn:
         """Generate a mid-debate summary and return it as a DebateTurn for display."""
+        search_query = f"{state.topic} research evidence"
+        search_results = self.searcher.search(search_query, max_results=TAVILY_MAX_RESULTS)
+        search_context = self.searcher.format_for_prompt(search_results)
+
         system = MEDIATOR_SYSTEM.format(
             name=self.persona.name,
             background=self.persona.background,
@@ -26,6 +32,7 @@ class MediatorAgent:
             topic=state.topic,
             transcript=format_transcript(state.turns),
             claim_ledger=format_claim_ledger(state.claim_ledger),
+            search_results=search_context,
         )
 
         thinking, raw_text = self.client.chat(system, user, MAX_SUMMARY_TOKENS, enable_thinking=True)
@@ -61,6 +68,10 @@ class MediatorAgent:
 
     def generate_verdict(self, state: DebateState) -> FinalVerdict:
         """Generate the final scored verdict after all debate turns."""
+        search_query = f"{state.topic} expert analysis conclusion"
+        search_results = self.searcher.search(search_query, max_results=TAVILY_MAX_RESULTS)
+        search_context = self.searcher.format_for_prompt(search_results)
+
         system = MEDIATOR_SYSTEM.format(
             name=self.persona.name,
             background=self.persona.background,
@@ -72,6 +83,7 @@ class MediatorAgent:
             transcript=format_transcript(state.turns),
             claim_ledger=format_claim_ledger(state.claim_ledger),
             summaries=format_summaries(state.mediator_summaries),
+            search_results=search_context,
         )
 
         _, raw_text = self.client.chat(system, user, MAX_VERDICT_TOKENS, enable_thinking=True)
@@ -87,6 +99,14 @@ class MediatorAgent:
                 notes=item.get("notes", ""),
             ))
 
+        citations: list[Citation] = []
+        for cit in data.get("citations", []):
+            citations.append(Citation(
+                title=cit.get("title", ""),
+                url=cit.get("url", ""),
+                snippet=cit.get("snippet", ""),
+            ))
+
         return FinalVerdict(
             argument_scorecard=scorecard,
             strongest_pro_arguments=data.get("strongest_pro_arguments", []),
@@ -96,6 +116,7 @@ class MediatorAgent:
             confidence_trajectory=data.get("confidence_trajectory", ""),
             nuanced_conclusion=data.get("nuanced_conclusion", ""),
             verdict=data.get("verdict", ""),
+            citations=citations,
         )
 
     def _safe_json_parse(self, raw: str) -> dict:

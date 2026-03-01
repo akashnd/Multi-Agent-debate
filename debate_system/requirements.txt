@@ -6,3 +6,6 @@ pydantic>=2.0.0
 # Optional providers — install only what you need
 openai>=1.30.0
 google-generativeai>=0.8.0
+
+# Web search (Tavily) — required for evidence-grounded debates
+tavily-python>=0.3.0

@@ -31,3 +31,8 @@ MAX_RETRIES       = 3           # max API retry attempts
 RETRY_BASE_DELAY  = 2.0         # base delay (s) for exponential backoff
 STREAM_DELAY      = 0.01        # seconds between streamed tokens (display pacing)
 TURN_TIMEOUT      = 120         # seconds before showing thinking spinner
+
+# ── Tavily Web Search ──────────────────────────────────────────────────────────
+# Set TAVILY_API_KEY in your .env to enable evidence-grounded arguments.
+# SEARCH_ENABLED defaults to true; set to "false" to disable without removing the key.
+TAVILY_MAX_RESULTS = int(os.environ.get("TAVILY_MAX_RESULTS", "3"))

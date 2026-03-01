@@ -2,19 +2,26 @@
 
 import json
 
-from config import MAX_ARGUMENT_TOKENS
+from config import MAX_ARGUMENT_TOKENS, TAVILY_MAX_RESULTS
 from llm.base import LLMClient
-from models.schemas import AgentPersona, DebateState, DebateTurn, Claim
+from models.schemas import AgentPersona, DebateState, DebateTurn, Claim, Citation
 from prompts.specialist_prompt import SPECIALIST_SYSTEM, SPECIALIST_USER, ROUTER_PROMPT
 from agents.utils import format_transcript, format_claim_ledger, get_last_mediator_summary
+from search.tavily import TavilySearch
 
 
 class SpecialistAgent:
-    def __init__(self, client: LLMClient):
+    def __init__(self, client: LLMClient, searcher: TavilySearch | None = None):
         self.client = client
+        self.searcher = searcher if searcher is not None else TavilySearch()
 
     def generate_turn(self, agent: AgentPersona, state: DebateState) -> DebateTurn:
         """Generate one complete debate turn for the given specialist."""
+        # Search for real-world evidence relevant to this specialist's domain
+        search_query = f"{state.topic} {agent.specialty}"
+        search_results = self.searcher.search(search_query, max_results=TAVILY_MAX_RESULTS)
+        search_context = self.searcher.format_for_prompt(search_results)
+
         system = SPECIALIST_SYSTEM.format(
             name=agent.name,
             specialty=agent.specialty,
@@ -32,6 +39,7 @@ class SpecialistAgent:
             last_mediator_summary=get_last_mediator_summary(state),
             name=agent.name,
             side=agent.side,
+            search_results=search_context,
         )
 
         thinking, raw_text = self.client.chat(
@@ -88,6 +96,14 @@ class SpecialistAgent:
                 rebutted_by=[],
             ))
 
+        citations: list[Citation] = []
+        for cit in data.get("citations", []):
+            citations.append(Citation(
+                title=cit.get("title", ""),
+                url=cit.get("url", ""),
+                snippet=cit.get("snippet", ""),
+            ))
+
         return DebateTurn(
             turn_number=turn_number,
             agent_name=agent.name,
@@ -98,6 +114,7 @@ class SpecialistAgent:
             new_claims=new_claims,
             rebuttal_targets=data.get("rebuttal_targets", []),
             confidence=float(data.get("confidence", 0.5)),
+            citations=citations,
         )
 
     def _safe_json_parse(self, raw: str) -> dict:

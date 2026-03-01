@@ -153,11 +153,22 @@ class DebateDisplay:
         # Confidence bar
         conf_section = f"\n[dim]📊 Confidence: {confidence_bar} {turn.confidence:.2f}[/dim]"
 
+        # Citations
+        citation_section = ""
+        if turn.citations:
+            lines = []
+            for i, cit in enumerate(turn.citations, 1):
+                lines.append(f"  [{i}] [link={cit.url}]{cit.title}[/link]  [dim]{cit.url}[/dim]")
+                if cit.snippet:
+                    lines.append(f"      [dim italic]{cit.snippet[:120]}[/dim italic]")
+            citation_section = "\n\n[bold dim]🔗 SOURCES[/bold dim]\n" + "\n".join(lines)
+
         body = (
             f"{thinking_section}"
             f"[bold]🗣 ARGUMENT[/bold]\n{turn.argument}"
             f"{rebuttal_section}"
             f"{conf_section}"
+            f"{citation_section}"
         )
 
         console.print()
@@ -289,6 +300,21 @@ class DebateDisplay:
                 padding=(1, 2),
             )
         )
+
+        # Verdict citations
+        if verdict.citations:
+            lines = []
+            for i, cit in enumerate(verdict.citations, 1):
+                lines.append(f"  [{i}] [link={cit.url}]{cit.title}[/link]  [dim]{cit.url}[/dim]")
+                if cit.snippet:
+                    lines.append(f"      [dim italic]{cit.snippet[:120]}[/dim italic]")
+            console.print(
+                Panel(
+                    "\n".join(lines),
+                    title="[bold dim]🔗 VERDICT SOURCES[/bold dim]",
+                    border_style="dim",
+                )
+            )
 
     # ─────────────────────────────────────────────
     # Claim Ledger

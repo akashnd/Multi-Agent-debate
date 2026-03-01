@@ -16,6 +16,9 @@ MEDIATOR_SUMMARY_USER = """You are mediating a debate on: {topic}
 === CLAIM LEDGER ===
 {claim_ledger}
 
+=== REAL-TIME SEARCH RESULTS (additional context for your analysis) ===
+{search_results}
+
 Provide a mid-debate analysis. Return ONLY valid JSON:
 {{
   "thinking": "your internal assessment of the debate quality and trajectory",
@@ -38,6 +41,10 @@ MEDIATOR_VERDICT_USER = """You have observed the full debate on: {topic}
 === ALL MEDIATOR SUMMARIES ===
 {summaries}
 
+=== REAL-TIME SEARCH RESULTS (use to ground your verdict in current evidence) ===
+{search_results}
+Cite any sources you rely on in the "citations" field.
+
 Deliver an intellectual verdict. Your job is NOT to pick a winner simplistically — it is to assess argument quality rigorously.
 
 Return ONLY valid JSON:
@@ -58,7 +65,11 @@ Return ONLY valid JSON:
   "fatal_con_weaknesses": "what the con side failed to adequately defend",
   "confidence_trajectory": "which agents grew or lost confidence over turns, and why — reference specific turns",
   "nuanced_conclusion": "3-4 paragraphs acknowledging complexity, identifying what the debate resolved, and what remains genuinely contested",
-  "verdict": "which side had the stronger overall case, with specific references to debate moments and claim_ids"
+  "verdict": "which side had the stronger overall case, with specific references to debate moments and claim_ids",
+  "citations": [
+    {{"title": "Source title", "url": "https://...", "snippet": "key finding that informed your verdict"}}
+  ]
 }}
 
+If you did not use any search results, set "citations" to [].
 No markdown, no explanation. Return ONLY the JSON object."""
