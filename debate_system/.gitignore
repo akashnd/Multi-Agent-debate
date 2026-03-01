@@ -2,7 +2,8 @@
 .env
 
 # Transcripts
-transcripts/
+transcripts/*
+!transcripts/.gitkeep
 
 # Python
 __pycache__/
