@@ -1,7 +1,13 @@
-"""Multi-Agent Debate System — Entry Point."""
+"""Multi-Agent Debate System — Entry Point.
 
-import sys
+Collects debate parameters, then hands everything to the LangGraph debate graph.
+All orchestration (cast generation, turn order, mediator interjections, the
+human's turn, the verdict, persistence) happens inside the graph; this file only
+gathers inputs and starts it.
+"""
+
 import os
+import sys
 from pathlib import Path
 
 # Add project root to path so modules resolve correctly
@@ -9,10 +15,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from dotenv import load_dotenv
 
-from config import DEFAULT_SPECIALISTS, DEFAULT_ROUNDS, WARN_COMPLEXITY_THRESHOLD
-from llm.factory import create_client
-from agents.decomposer import TopicDecomposer
-from debate.orchestrator import DebateOrchestrator
+from config import DEFAULT_ROUNDS, DEFAULT_SPECIALISTS, WARN_COMPLEXITY_THRESHOLD
+from debate.runner import DebateRunner
+from models.schemas import AgentPersona
 from ui.display import DebateDisplay, console
 
 
@@ -31,20 +36,39 @@ def get_int_input(prompt: str, default: int, min_val: int = 1, max_val: int = 10
             console.print("[yellow]Please enter a valid number.[/yellow]")
 
 
+def maybe_human_participant() -> AgentPersona | None:
+    """Ask whether a human wants to join the debate as an extra pro/con voice."""
+    join = input("\nJoin the debate yourself as a human participant? [y/N]: ").strip().lower()
+    if join not in ("y", "yes"):
+        return None
+
+    side = ""
+    while side not in ("pro", "con"):
+        side = input("Which side will you argue? [pro/con]: ").strip().lower()
+
+    name = input("Your name (shown in the transcript) [default: You]: ").strip() or "You"
+    specialty = (
+        input("A short label for your angle/expertise (optional) [default: Human Participant]: ").strip()
+        or "Human Participant"
+    )
+
+    console.print(f"\n[bold]{name}[/bold] will join the {side.upper()} side.")
+    return AgentPersona(
+        name=name,
+        side=side,
+        specialty=specialty,
+        background="A human participant arguing their own views.",
+        personality="Speaks for themselves.",
+        core_argument_angle=specialty,
+        is_human=True,
+    )
+
+
 def main():
     load_dotenv()
 
     provider = os.environ.get("LLM_PROVIDER", "anthropic").lower()
     console.print(f"[dim]Using LLM provider: [bold]{provider}[/bold][/dim]")
-
-    # create_client() validates the API key and exits with a clear message if missing
-    try:
-        client = create_client()
-    except SystemExit:
-        raise
-    except Exception as e:
-        console.print(f"[bold red]Failed to initialise LLM client:[/bold red] {e}")
-        sys.exit(1)
 
     display = DebateDisplay()
     display.show_welcome()
@@ -52,7 +76,9 @@ def main():
     # ── Get debate parameters ──────────────────────────────────────────────
     topic = input("Enter debate topic: ").strip()
     if not topic:
-        console.print("[yellow]No topic entered. Using default: 'Social media does more harm than good'[/yellow]")
+        console.print(
+            "[yellow]No topic entered. Using default: 'Social media does more harm than good'[/yellow]"
+        )
         topic = "Social media does more harm than good"
 
     n_rounds = get_int_input(
@@ -75,57 +101,31 @@ def main():
             f"\n[yellow]Warning:[/yellow] {total_turns} total turns may produce very long "
             f"context windows and high API costs. Consider reducing rounds or specialist pairs."
         )
-        confirm = input("Continue anyway? [y/N]: ").strip().lower()
-        if confirm not in ("y", "yes"):
+        if input("Continue anyway? [y/N]: ").strip().lower() not in ("y", "yes"):
             console.print("[dim]Exiting.[/dim]")
             sys.exit(0)
 
-    # ── Generate agents ────────────────────────────────────────────────────
+    human_persona = maybe_human_participant()
+
+    # ── Run the debate graph ───────────────────────────────────────────────
     console.print(f"\n[dim]Generating {k_specialists * 2 + 1} specialist agents...[/dim]")
-    decomposer = TopicDecomposer(client)
+
+    runner = DebateRunner(display)
+    console.print(f"[dim]Graph thread: {runner.thread_id}[/dim]")
 
     try:
-        agents = decomposer.decompose(topic, k_specialists)
-    except Exception as e:
-        display.show_error(f"Failed to generate agents: {e}")
-        sys.exit(1)
-
-    # Display generated agents and let user confirm or regenerate
-    while True:
-        display.show_agents_generated(agents)
-
-        for agent in agents:
-            display.show_agent_details(agent)
-
-        confirm = input("Proceed with these agents? [Y/n/r (regenerate)]: ").strip().lower()
-        if confirm in ("", "y", "yes"):
-            break
-        elif confirm in ("r", "regen", "regenerate"):
-            console.print("[dim]Regenerating agents...[/dim]")
-            try:
-                agents = decomposer.decompose(topic, k_specialists)
-            except Exception as e:
-                display.show_error(f"Failed to regenerate agents: {e}")
-                sys.exit(1)
-        else:
-            console.print("[dim]Exiting.[/dim]")
-            sys.exit(0)
-
-    # ── Run the debate ─────────────────────────────────────────────────────
-    try:
-        orchestrator = DebateOrchestrator(
-            client=client,
+        runner.run(
             topic=topic,
             n_rounds=n_rounds,
-            agents=agents,
-            display=display,
+            k_specialists=k_specialists,
+            human_persona=human_persona,
         )
-        orchestrator.run()
     except SystemExit:
-        pass
+        raise
     except Exception as e:
         display.show_error(f"Unexpected error during debate: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

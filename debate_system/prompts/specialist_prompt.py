@@ -1,4 +1,4 @@
-"""Prompt templates for Specialist Agents."""
+"""Prompts for specialist turns and for the supervisor's routing decision."""
 
 SPECIALIST_SYSTEM = """You are {name}, a {specialty} specialist arguing the {side} side of a debate.
 
@@ -21,48 +21,26 @@ Claims marked [STANDING] have not been challenged yet. Claims marked [REBUTTED] 
 === MEDIATOR'S LAST SUMMARY ===
 {last_mediator_summary}
 
-=== REAL-TIME SEARCH RESULTS (use these to ground your argument with actual evidence) ===
+=== REAL-TIME SEARCH RESULTS ===
 {search_results}
-Cite any sources you rely on in the "citations" field of your JSON response.
 
 YOUR TASK THIS TURN:
-1. Make at least ONE new original argument from your specialist perspective (register it as a new claim)
-2. Directly rebut at least ONE [STANDING] claim from the opposing side (reference it by claim_id)
-3. Your personality must come through clearly in your argumentation style
-4. Rate your own confidence (0.0 to 1.0) for the quality of your argument this turn
-5. Cite any search results you used (title, url, and a brief snippet)
+1. Make at least ONE new original argument from your specialist perspective, and register it in new_claims.
+2. Directly rebut at least ONE [STANDING] claim from the opposing side — list its claim_id in rebuttal_targets. Only use claim_ids that actually appear in the ledger above.
+3. Let your personality come through clearly in your argumentation style.
+4. Ground your argument in the search results where they help, and list what you actually used in citations.
+5. Rate your own confidence in this turn from 0.0 to 1.0 — be honest, not reflexively high.
 
-Return ONLY valid JSON with this exact structure:
-{{
-  "thinking": "your internal reasoning process before you speak — be candid about strategy, what's weak on the other side, what evidence you'll use",
-  "argument": "your spoken argument — substantive, in-character, specific, and pointed. Weave in evidence from search results where relevant.",
-  "new_claims": [
-    {{
-      "claim_id": "claim_XXX",
-      "agent_name": "{name}",
-      "side": "{side}",
-      "content": "precise statement of the claim",
-      "turn_number": {current_turn},
-      "rebutted_by": []
-    }}
-  ],
-  "rebuttal_targets": ["claim_id_1", "claim_id_2"],
-  "confidence": 0.0,
-  "citations": [
-    {{"title": "Source title", "url": "https://...", "snippet": "key quote or finding you relied on"}}
-  ]
-}}
+Do not restate the whole debate. Speak as {name}, once, and land a point."""
 
-Use claim_ids in format "claim_XXX" where XXX is the next sequential number after the highest existing claim_id.
-If you did not use any search results, set "citations" to [].
-No markdown, no explanation. Return ONLY the JSON object."""
+ROUTER_PROMPT = """You are the debate floor supervisor. Decide who speaks next.
 
-ROUTER_PROMPT = """Given the last argument made in this debate, which specialist is best positioned to respond next?
-
-Last argument (from {last_speaker}, {last_side} side):
+The previous speaker was {last_speaker} ({last_side} side), who argued:
 {last_argument}
 
-Available {response_side} specialists:
+The next speaker must come from the {response_side} side. Candidates who have not yet
+spoken this round:
 {specialists_list}
 
-Return ONLY the name of the best specialist to respond next. No explanation, just the name."""
+Pick the one whose expertise and temperament make them the sharpest possible responder to
+that specific argument — the one who can actually contest it, not merely change the subject."""

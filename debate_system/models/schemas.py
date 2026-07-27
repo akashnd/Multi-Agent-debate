@@ -39,6 +39,7 @@ class AgentPersona(BaseModel):
     background: str                  # 2-3 sentence bio
     personality: str                 # e.g. "Aggressive empiricist who demands data"
     core_argument_angle: str         # their unique lens on the topic
+    is_human: bool = False           # True if a real person plays this persona
 
 
 class MediatorSummary(BaseModel):

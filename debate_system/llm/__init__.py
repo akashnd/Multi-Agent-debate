@@ -1,4 +1,3 @@
-from .base import LLMClient
-from .factory import create_client
+from llm.models import active_provider, get_chat_model
 
-__all__ = ["LLMClient", "create_client"]
+__all__ = ["get_chat_model", "active_provider"]

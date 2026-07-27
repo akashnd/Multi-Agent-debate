@@ -1,3 +1,3 @@
-from search.tavily import TavilySearch, SearchResult
+from search.tavily import EvidenceSearch, SearchResult, TavilySearch, get_searcher
 
-__all__ = ["TavilySearch", "SearchResult"]
+__all__ = ["EvidenceSearch", "TavilySearch", "SearchResult", "get_searcher"]

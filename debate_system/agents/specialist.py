@@ -1,139 +1,106 @@
-"""Specialist Agent — generates one debate turn for a specialist persona."""
+"""Specialist turn generation.
 
-import json
+`build_specialist_turn` returns two things: the `DebateTurn` to append to the
+record, and the *delta* for the claim ledger. The delta contains both brand-new
+claims and "rebuttal patches" — stub copies of existing claims carrying only the
+new `rebutted_by` entry — which the ledger reducer folds in. The node never has
+to read-modify-write the whole ledger.
+"""
 
-from config import MAX_ARGUMENT_TOKENS, TAVILY_MAX_RESULTS
-from llm.base import LLMClient
-from models.schemas import AgentPersona, DebateState, DebateTurn, Claim, Citation
-from prompts.specialist_prompt import SPECIALIST_SYSTEM, SPECIALIST_USER, ROUTER_PROMPT
-from agents.utils import format_transcript, format_claim_ledger, get_last_mediator_summary
-from search.tavily import TavilySearch
+from __future__ import annotations
+
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable
+
+from agents.utils import (
+    format_claim_ledger,
+    format_transcript,
+    get_last_mediator_summary,
+    next_claim_id,
+)
+from config import MAX_ARGUMENT_TOKENS
+from llm.models import get_chat_model
+from models.outputs import SpecialistTurnOutput
+from models.schemas import AgentPersona, Citation, Claim, DebateState, DebateTurn
+from prompts.specialist_prompt import SPECIALIST_SYSTEM, SPECIALIST_USER
+from search.tavily import get_searcher
+
+SPECIALIST_PROMPT = ChatPromptTemplate.from_messages(
+    [("system", SPECIALIST_SYSTEM), ("human", SPECIALIST_USER)]
+)
 
 
-class SpecialistAgent:
-    def __init__(self, client: LLMClient, searcher: TavilySearch | None = None):
-        self.client = client
-        self.searcher = searcher if searcher is not None else TavilySearch()
+def specialist_chain() -> Runnable:
+    model = get_chat_model(max_tokens=MAX_ARGUMENT_TOKENS)
+    return SPECIALIST_PROMPT | model.with_structured_output(SpecialistTurnOutput)
 
-    def generate_turn(self, agent: AgentPersona, state: DebateState) -> DebateTurn:
-        """Generate one complete debate turn for the given specialist."""
-        # Search for real-world evidence relevant to this specialist's domain
-        search_query = f"{state.topic} {agent.specialty}"
-        search_results = self.searcher.search(search_query, max_results=TAVILY_MAX_RESULTS)
-        search_context = self.searcher.format_for_prompt(search_results)
 
-        system = SPECIALIST_SYSTEM.format(
-            name=agent.name,
-            specialty=agent.specialty,
-            side=agent.side,
-            background=agent.background,
-            personality=agent.personality,
-            core_argument_angle=agent.core_argument_angle,
-        )
-        user = SPECIALIST_USER.format(
-            topic=state.topic,
-            current_turn=state.current_turn,
-            total_turns=state.total_turns,
-            transcript=format_transcript(state.turns),
-            claim_ledger=format_claim_ledger(state.claim_ledger),
-            last_mediator_summary=get_last_mediator_summary(state),
-            name=agent.name,
-            side=agent.side,
-            search_results=search_context,
-        )
+def build_specialist_turn(
+    agent: AgentPersona,
+    state: DebateState,
+    turn_number: int,
+) -> tuple[DebateTurn, list[Claim]]:
+    """Generate one specialist turn. Returns (turn, claim_ledger_delta)."""
+    search_context = get_searcher().context_for(f"{state.topic} {agent.specialty}")
 
-        thinking, raw_text = self.client.chat(
-            system, user, MAX_ARGUMENT_TOKENS, enable_thinking=True
-        )
-        return self._parse_turn(thinking, raw_text, agent, state.current_turn)
+    out: SpecialistTurnOutput = specialist_chain().invoke(
+        {
+            # persona (system message)
+            "name": agent.name,
+            "specialty": agent.specialty,
+            "side": agent.side,
+            "background": agent.background,
+            "personality": agent.personality,
+            "core_argument_angle": agent.core_argument_angle,
+            # debate context (human message)
+            "topic": state.topic,
+            "current_turn": turn_number,
+            "total_turns": state.total_turns,
+            "transcript": format_transcript(state.turns),
+            "claim_ledger": format_claim_ledger(state.claim_ledger),
+            "last_mediator_summary": get_last_mediator_summary(state),
+            "search_results": search_context,
+        }
+    )
 
-    def route_next_speaker(
-        self,
-        last_turn: DebateTurn,
-        candidates: list[AgentPersona],
-        response_side: str,
-    ) -> AgentPersona:
-        """Lightweight routing call: pick which specialist responds best to the last argument."""
-        if len(candidates) == 1:
-            return candidates[0]
-
-        specialists_list = "\n".join(
-            f"  - {a.name}: {a.specialty} ({a.personality})" for a in candidates
-        )
-        prompt = ROUTER_PROMPT.format(
-            last_speaker=last_turn.agent_name,
-            last_side=last_turn.side,
-            last_argument=last_turn.argument[:500],
-            response_side=response_side,
-            specialists_list=specialists_list,
-        )
-        try:
-            chosen_name = self.client.chat_simple(prompt, max_tokens=100)
-            for agent in candidates:
-                if agent.name.lower() in chosen_name.lower():
-                    return agent
-        except Exception:
-            pass
-        return candidates[0]
-
-    def _parse_turn(
-        self,
-        thinking: str,
-        raw_text: str,
-        agent: AgentPersona,
-        turn_number: int,
-    ) -> DebateTurn:
-        data = self._safe_json_parse(raw_text)
-
-        new_claims: list[Claim] = []
-        for c in data.get("new_claims", []):
-            new_claims.append(Claim(
-                claim_id=c.get("claim_id", f"claim_{turn_number:03d}"),
-                agent_name=agent.name,
-                side=agent.side,
-                content=c.get("content", ""),
-                turn_number=turn_number,
-                rebutted_by=[],
-            ))
-
-        citations: list[Citation] = []
-        for cit in data.get("citations", []):
-            citations.append(Citation(
-                title=cit.get("title", ""),
-                url=cit.get("url", ""),
-                snippet=cit.get("snippet", ""),
-            ))
-
-        return DebateTurn(
-            turn_number=turn_number,
+    # Claim ids are assigned here, not by the model — models are unreliable at
+    # continuing a sequence and collisions would silently corrupt the ledger.
+    ledger_delta: list[Claim] = []
+    known = list(state.claim_ledger)
+    new_claims: list[Claim] = []
+    for proposed in out.new_claims:
+        claim = Claim(
+            claim_id=next_claim_id(known + new_claims),
             agent_name=agent.name,
-            agent_role=agent.specialty,
             side=agent.side,
-            thinking=thinking or data.get("thinking", ""),
-            argument=data.get("argument", ""),
-            new_claims=new_claims,
-            rebuttal_targets=data.get("rebuttal_targets", []),
-            confidence=float(data.get("confidence", 0.5)),
-            citations=citations,
+            content=proposed.content,
+            turn_number=turn_number,
+            rebutted_by=[],
         )
+        new_claims.append(claim)
+    ledger_delta.extend(new_claims)
 
-    def _safe_json_parse(self, raw: str) -> dict:
-        text = raw.strip()
-        if text.startswith("```"):
-            lines = text.split("\n")
-            text = "\n".join(lines[1:-1]) if lines[-1] == "```" else "\n".join(lines[1:])
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            return self._repair_json(raw)
+    # Rebuttal patches: only for claim_ids that actually exist and aren't ours.
+    attribution = new_claims[0].claim_id if new_claims else agent.name
+    existing_by_id = {c.claim_id: c for c in state.claim_ledger}
+    valid_targets: list[str] = []
+    for target_id in out.rebuttal_targets:
+        target = existing_by_id.get(target_id)
+        if target is None or target.side == agent.side:
+            continue
+        valid_targets.append(target_id)
+        ledger_delta.append(target.model_copy(deep=True, update={"rebutted_by": [attribution]}))
 
-    def _repair_json(self, malformed: str) -> dict:
-        fixed = self.client.chat_simple(
-            f"The following JSON is malformed. Fix it and return ONLY valid JSON, nothing else:\n\n{malformed}",
-            max_tokens=4096,
-        )
-        fixed = fixed.strip()
-        if fixed.startswith("```"):
-            lines = fixed.split("\n")
-            fixed = "\n".join(lines[1:-1]) if lines[-1] == "```" else "\n".join(lines[1:])
-        return json.loads(fixed)
+    turn = DebateTurn(
+        turn_number=turn_number,
+        agent_name=agent.name,
+        agent_role=agent.specialty,
+        side=agent.side,
+        thinking=out.thinking,
+        argument=out.argument,
+        new_claims=new_claims,
+        rebuttal_targets=valid_targets,
+        confidence=max(0.0, min(1.0, float(out.confidence))),
+        citations=[Citation(**c.model_dump()) for c in out.citations],
+    )
+    return turn, ledger_delta

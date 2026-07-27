@@ -1,5 +1,7 @@
 """Shared formatting utilities for agents (avoids circular imports)."""
 
+import re
+
 from models.schemas import DebateTurn, Claim, MediatorSummary
 
 
@@ -36,6 +38,16 @@ def get_last_mediator_summary(state) -> str:
         f"Contested Ground: {s.contested_ground}\n"
         f"Probing Question: {s.probing_question}"
     )
+
+
+def next_claim_id(claims: list[Claim]) -> str:
+    """Compute the next sequential claim_id (e.g. 'claim_004' after 'claim_003')."""
+    max_n = 0
+    for c in claims:
+        match = re.search(r"(\d+)\s*$", c.claim_id)
+        if match:
+            max_n = max(max_n, int(match.group(1)))
+    return f"claim_{max_n + 1:03d}"
 
 
 def format_summaries(summaries: list[MediatorSummary]) -> str:

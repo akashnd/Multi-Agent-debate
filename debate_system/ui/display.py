@@ -13,6 +13,7 @@ from rich.spinner import Spinner
 from rich.live import Live
 
 from models.schemas import DebateTurn, DebateState, AgentPersona, FinalVerdict, Claim
+from agents.utils import format_transcript, format_claim_ledger, get_last_mediator_summary
 
 # Singleton console — never create multiple Console instances
 console = Console()
@@ -63,10 +64,11 @@ class DebateDisplay:
         mediator_info = None
 
         for agent in agents:
+            display_name = f"{agent.name} [bold](You)[/bold]" if agent.is_human else agent.name
             if agent.side == "pro":
-                pro_table.add_row(agent.name, agent.specialty, agent.personality)
+                pro_table.add_row(display_name, agent.specialty, agent.personality)
             elif agent.side == "con":
-                con_table.add_row(agent.name, agent.specialty, agent.personality)
+                con_table.add_row(display_name, agent.specialty, agent.personality)
             elif agent.side == "mediator":
                 mediator_info = agent
 
@@ -114,6 +116,47 @@ class DebateDisplay:
     def show_thinking_spinner(self, agent_name: str):
         """Show a spinner while waiting for an agent's response."""
         console.print(f"[dim]  {agent_name} is thinking...[/dim]")
+
+    # ─────────────────────────────────────────────
+    # Human Turn
+    # ─────────────────────────────────────────────
+
+    def show_human_turn_context(self, agent: AgentPersona, state: DebateState):
+        """Show a human participant everything they need before typing their turn."""
+        color = SIDE_COLORS.get(agent.side, "white")
+        label = SIDE_LABELS.get(agent.side, agent.side.upper())
+
+        console.print()
+        console.print(
+            Rule(
+                f"[bold {color}]YOUR TURN — {agent.name} ({label}) | Turn {state.current_turn} of {state.total_turns}[/bold {color}]",
+                style=color,
+            )
+        )
+        console.print()
+
+        console.print(
+            Panel(
+                format_transcript(state.turns),
+                title="[bold]Debate So Far[/bold]",
+                border_style="dim",
+            )
+        )
+        console.print(
+            Panel(
+                format_claim_ledger(state.claim_ledger),
+                title="[bold]Claim Ledger[/bold] [dim](standing claims are still open to rebut)[/dim]",
+                border_style="dim",
+            )
+        )
+
+        summary = get_last_mediator_summary(state)
+        if "No mediator summary" not in summary:
+            console.print(
+                Panel(summary, title="[bold yellow]Mediator's Last Summary[/bold yellow]", border_style="yellow")
+            )
+
+        console.print()
 
     # ─────────────────────────────────────────────
     # Specialist Turn

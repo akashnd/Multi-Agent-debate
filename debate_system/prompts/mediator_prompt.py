@@ -1,4 +1,4 @@
-"""Prompt templates for the Mediator Agent."""
+"""Prompts for the mediator's mid-debate summary and final verdict."""
 
 MEDIATOR_SYSTEM = """You are {name}, a neutral mediator and analytical adjudicator.
 
@@ -16,19 +16,12 @@ MEDIATOR_SUMMARY_USER = """You are mediating a debate on: {topic}
 === CLAIM LEDGER ===
 {claim_ledger}
 
-=== REAL-TIME SEARCH RESULTS (additional context for your analysis) ===
+=== REAL-TIME SEARCH RESULTS ===
 {search_results}
 
-Provide a mid-debate analysis. Return ONLY valid JSON:
-{{
-  "thinking": "your internal assessment of the debate quality and trajectory",
-  "state_of_debate": "What has each side established so far? Be specific about which claims have held up.",
-  "contested_ground": "What are the key unresolved clashes between the sides?",
-  "weakest_arguments": "Which claims are poorly supported or easy to rebut? Name the agents.",
-  "probing_question": "One sharp, specific question that forces the weaker side to defend itself better — address it to a specific agent by name."
-}}
-
-No markdown, no explanation. Return ONLY the JSON object."""
+Provide a mid-debate analysis. Be concrete: name agents, cite claim_ids, and say plainly
+which arguments are not holding up. Your probing question should be one a competent
+debater would find genuinely uncomfortable to answer."""
 
 MEDIATOR_VERDICT_USER = """You have observed the full debate on: {topic}
 
@@ -41,35 +34,15 @@ MEDIATOR_VERDICT_USER = """You have observed the full debate on: {topic}
 === ALL MEDIATOR SUMMARIES ===
 {summaries}
 
-=== REAL-TIME SEARCH RESULTS (use to ground your verdict in current evidence) ===
+=== REAL-TIME SEARCH RESULTS ===
 {search_results}
-Cite any sources you rely on in the "citations" field.
 
-Deliver an intellectual verdict. Your job is NOT to pick a winner simplistically — it is to assess argument quality rigorously.
+Deliver an intellectual verdict. Your job is NOT to pick a winner simplistically — it is to
+assess argument quality rigorously.
 
-Return ONLY valid JSON:
-{{
-  "thinking": "your comprehensive analytical reasoning before delivering the verdict",
-  "argument_scorecard": [
-    {{
-      "claim_id": "claim_XXX",
-      "claim_summary": "brief description of the claim",
-      "defense_rating": 1,
-      "successfully_rebutted": false,
-      "notes": "why you rated it this way"
-    }}
-  ],
-  "strongest_pro_arguments": ["argument 1", "argument 2", "argument 3"],
-  "strongest_con_arguments": ["argument 1", "argument 2", "argument 3"],
-  "fatal_pro_weaknesses": "what the pro side failed to adequately defend",
-  "fatal_con_weaknesses": "what the con side failed to adequately defend",
-  "confidence_trajectory": "which agents grew or lost confidence over turns, and why — reference specific turns",
-  "nuanced_conclusion": "3-4 paragraphs acknowledging complexity, identifying what the debate resolved, and what remains genuinely contested",
-  "verdict": "which side had the stronger overall case, with specific references to debate moments and claim_ids",
-  "citations": [
-    {{"title": "Source title", "url": "https://...", "snippet": "key finding that informed your verdict"}}
-  ]
-}}
-
-If you did not use any search results, set "citations" to [].
-No markdown, no explanation. Return ONLY the JSON object."""
+- Score every significant claim in the ledger: defense_rating 1-5, and whether it was
+  successfully rebutted.
+- Reference specific turns and claim_ids throughout, not vague impressions.
+- The nuanced conclusion should acknowledge what the debate actually resolved and what
+  remains genuinely contested.
+- Cite any search results that informed your verdict."""

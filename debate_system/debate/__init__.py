@@ -1,4 +1,3 @@
-from .orchestrator import DebateOrchestrator
-from .turn_selector import TurnSelector
+from debate.runner import DebateRunner
 
-__all__ = ["DebateOrchestrator", "TurnSelector"]
+__all__ = ["DebateRunner"]

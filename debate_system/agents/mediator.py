@@ -1,141 +1,125 @@
-"""Mediator Agent — mid-debate summaries and final verdict."""
+"""Mediator chains — mid-debate summary and final scored verdict."""
 
-import json
+from __future__ import annotations
 
-from config import MAX_VERDICT_TOKENS, MAX_SUMMARY_TOKENS, TAVILY_MAX_RESULTS
-from llm.base import LLMClient
-from models.schemas import AgentPersona, DebateState, DebateTurn, MediatorSummary, FinalVerdict, ClaimScore, Citation
-from prompts.mediator_prompt import MEDIATOR_SYSTEM, MEDIATOR_SUMMARY_USER, MEDIATOR_VERDICT_USER
-from agents.utils import format_transcript, format_claim_ledger, format_summaries
-from search.tavily import TavilySearch
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import Runnable
+
+from agents.utils import format_claim_ledger, format_summaries, format_transcript
+from config import MAX_SUMMARY_TOKENS, MAX_VERDICT_TOKENS
+from llm.models import get_chat_model
+from models.outputs import FinalVerdictOutput, MediatorSummaryOutput
+from models.schemas import (
+    AgentPersona,
+    Citation,
+    ClaimScore,
+    DebateState,
+    DebateTurn,
+    FinalVerdict,
+    MediatorSummary,
+)
+from prompts.mediator_prompt import (
+    MEDIATOR_SUMMARY_USER,
+    MEDIATOR_SYSTEM,
+    MEDIATOR_VERDICT_USER,
+)
+from search.tavily import get_searcher
+
+SUMMARY_PROMPT = ChatPromptTemplate.from_messages(
+    [("system", MEDIATOR_SYSTEM), ("human", MEDIATOR_SUMMARY_USER)]
+)
+VERDICT_PROMPT = ChatPromptTemplate.from_messages(
+    [("system", MEDIATOR_SYSTEM), ("human", MEDIATOR_VERDICT_USER)]
+)
 
 
-class MediatorAgent:
-    def __init__(self, client: LLMClient, persona: AgentPersona, searcher: TavilySearch | None = None):
-        self.client = client
-        self.persona = persona
-        self.searcher = searcher if searcher is not None else TavilySearch()
+def summary_chain() -> Runnable:
+    model = get_chat_model(max_tokens=MAX_SUMMARY_TOKENS)
+    return SUMMARY_PROMPT | model.with_structured_output(MediatorSummaryOutput)
 
-    def generate_summary_as_turn(self, state: DebateState) -> DebateTurn:
-        """Generate a mid-debate summary and return it as a DebateTurn for display."""
-        search_query = f"{state.topic} research evidence"
-        search_results = self.searcher.search(search_query, max_results=TAVILY_MAX_RESULTS)
-        search_context = self.searcher.format_for_prompt(search_results)
 
-        system = MEDIATOR_SYSTEM.format(
-            name=self.persona.name,
-            background=self.persona.background,
-            personality=self.persona.personality,
-            core_argument_angle=self.persona.core_argument_angle,
-        )
-        user = MEDIATOR_SUMMARY_USER.format(
-            topic=state.topic,
-            transcript=format_transcript(state.turns),
-            claim_ledger=format_claim_ledger(state.claim_ledger),
-            search_results=search_context,
-        )
+def verdict_chain() -> Runnable:
+    model = get_chat_model(max_tokens=MAX_VERDICT_TOKENS)
+    return VERDICT_PROMPT | model.with_structured_output(FinalVerdictOutput)
 
-        thinking, raw_text = self.client.chat(system, user, MAX_SUMMARY_TOKENS, enable_thinking=True)
-        data = self._safe_json_parse(raw_text)
 
-        summary = MediatorSummary(
-            turn_number=state.current_turn,
-            state_of_debate=data.get("state_of_debate", ""),
-            contested_ground=data.get("contested_ground", ""),
-            weakest_arguments=data.get("weakest_arguments", ""),
-            probing_question=data.get("probing_question", ""),
-        )
-        state.mediator_summaries.append(summary)
+def _persona_vars(persona: AgentPersona) -> dict:
+    return {
+        "name": persona.name,
+        "background": persona.background,
+        "personality": persona.personality,
+        "core_argument_angle": persona.core_argument_angle,
+    }
 
-        argument = (
+
+def build_mediator_summary(
+    persona: AgentPersona,
+    state: DebateState,
+    turn_number: int,
+) -> tuple[DebateTurn, MediatorSummary]:
+    """Mid-debate checkpoint. Returns (turn for the record, structured summary)."""
+    search_context = get_searcher().context_for(f"{state.topic} research evidence")
+
+    out: MediatorSummaryOutput = summary_chain().invoke(
+        {
+            **_persona_vars(persona),
+            "topic": state.topic,
+            "transcript": format_transcript(state.turns),
+            "claim_ledger": format_claim_ledger(state.claim_ledger),
+            "search_results": search_context,
+        }
+    )
+
+    summary = MediatorSummary(
+        turn_number=turn_number,
+        state_of_debate=out.state_of_debate,
+        contested_ground=out.contested_ground,
+        weakest_arguments=out.weakest_arguments,
+        probing_question=out.probing_question,
+    )
+
+    turn = DebateTurn(
+        turn_number=turn_number,
+        agent_name=persona.name,
+        agent_role=persona.specialty,
+        side="mediator",
+        thinking=out.thinking,
+        argument=(
             f"STATE OF DEBATE: {summary.state_of_debate}\n\n"
             f"CONTESTED GROUND: {summary.contested_ground}\n\n"
             f"WEAKEST ARGUMENTS: {summary.weakest_arguments}\n\n"
             f"PROBING QUESTION: {summary.probing_question}"
-        )
+        ),
+        new_claims=[],
+        rebuttal_targets=[],
+        confidence=1.0,
+    )
+    return turn, summary
 
-        return DebateTurn(
-            turn_number=state.current_turn,
-            agent_name=self.persona.name,
-            agent_role=self.persona.specialty,
-            side="mediator",
-            thinking=thinking or data.get("thinking", ""),
-            argument=argument,
-            new_claims=[],
-            rebuttal_targets=[],
-            confidence=1.0,
-        )
 
-    def generate_verdict(self, state: DebateState) -> FinalVerdict:
-        """Generate the final scored verdict after all debate turns."""
-        search_query = f"{state.topic} expert analysis conclusion"
-        search_results = self.searcher.search(search_query, max_results=TAVILY_MAX_RESULTS)
-        search_context = self.searcher.format_for_prompt(search_results)
+def build_final_verdict(persona: AgentPersona, state: DebateState) -> FinalVerdict:
+    """Score the whole debate."""
+    search_context = get_searcher().context_for(f"{state.topic} expert analysis conclusion")
 
-        system = MEDIATOR_SYSTEM.format(
-            name=self.persona.name,
-            background=self.persona.background,
-            personality=self.persona.personality,
-            core_argument_angle=self.persona.core_argument_angle,
-        )
-        user = MEDIATOR_VERDICT_USER.format(
-            topic=state.topic,
-            transcript=format_transcript(state.turns),
-            claim_ledger=format_claim_ledger(state.claim_ledger),
-            summaries=format_summaries(state.mediator_summaries),
-            search_results=search_context,
-        )
+    out: FinalVerdictOutput = verdict_chain().invoke(
+        {
+            **_persona_vars(persona),
+            "topic": state.topic,
+            "transcript": format_transcript(state.turns),
+            "claim_ledger": format_claim_ledger(state.claim_ledger),
+            "summaries": format_summaries(state.mediator_summaries),
+            "search_results": search_context,
+        }
+    )
 
-        _, raw_text = self.client.chat(system, user, MAX_VERDICT_TOKENS, enable_thinking=True)
-        data = self._safe_json_parse(raw_text)
-
-        scorecard: list[ClaimScore] = []
-        for item in data.get("argument_scorecard", []):
-            scorecard.append(ClaimScore(
-                claim_id=item.get("claim_id", ""),
-                claim_summary=item.get("claim_summary", ""),
-                defense_rating=int(item.get("defense_rating", 3)),
-                successfully_rebutted=bool(item.get("successfully_rebutted", False)),
-                notes=item.get("notes", ""),
-            ))
-
-        citations: list[Citation] = []
-        for cit in data.get("citations", []):
-            citations.append(Citation(
-                title=cit.get("title", ""),
-                url=cit.get("url", ""),
-                snippet=cit.get("snippet", ""),
-            ))
-
-        return FinalVerdict(
-            argument_scorecard=scorecard,
-            strongest_pro_arguments=data.get("strongest_pro_arguments", []),
-            strongest_con_arguments=data.get("strongest_con_arguments", []),
-            fatal_pro_weaknesses=data.get("fatal_pro_weaknesses", ""),
-            fatal_con_weaknesses=data.get("fatal_con_weaknesses", ""),
-            confidence_trajectory=data.get("confidence_trajectory", ""),
-            nuanced_conclusion=data.get("nuanced_conclusion", ""),
-            verdict=data.get("verdict", ""),
-            citations=citations,
-        )
-
-    def _safe_json_parse(self, raw: str) -> dict:
-        text = raw.strip()
-        if text.startswith("```"):
-            lines = text.split("\n")
-            text = "\n".join(lines[1:-1]) if lines[-1] == "```" else "\n".join(lines[1:])
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            return self._repair_json(raw)
-
-    def _repair_json(self, malformed: str) -> dict:
-        fixed = self.client.chat_simple(
-            f"The following JSON is malformed. Fix it and return ONLY valid JSON, nothing else:\n\n{malformed}",
-            max_tokens=4096,
-        )
-        fixed = fixed.strip()
-        if fixed.startswith("```"):
-            lines = fixed.split("\n")
-            fixed = "\n".join(lines[1:-1]) if lines[-1] == "```" else "\n".join(lines[1:])
-        return json.loads(fixed)
+    return FinalVerdict(
+        argument_scorecard=[ClaimScore(**s.model_dump()) for s in out.argument_scorecard],
+        strongest_pro_arguments=out.strongest_pro_arguments,
+        strongest_con_arguments=out.strongest_con_arguments,
+        fatal_pro_weaknesses=out.fatal_pro_weaknesses,
+        fatal_con_weaknesses=out.fatal_con_weaknesses,
+        confidence_trajectory=out.confidence_trajectory,
+        nuanced_conclusion=out.nuanced_conclusion,
+        verdict=out.verdict,
+        citations=[Citation(**c.model_dump()) for c in out.citations],
+    )
