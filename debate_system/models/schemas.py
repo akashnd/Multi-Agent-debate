@@ -29,6 +29,8 @@ class DebateTurn(BaseModel):
     rebuttal_targets: list[str] = Field(default_factory=list)  # claim_ids this turn rebuts
     confidence: float = 0.5  # 0.0 to 1.0, agent's self-rated confidence this turn
     citations: list[Citation] = Field(default_factory=list)  # sources cited this turn
+    retrieved_sources: list[Citation] = Field(default_factory=list)  # what the agent was shown
+    search_query: str = ""
 
 
 class AgentPersona(BaseModel):
@@ -67,6 +69,8 @@ class FinalVerdict(BaseModel):
     nuanced_conclusion: str
     verdict: str  # which side had stronger case and why
     citations: list[Citation] = Field(default_factory=list)  # sources supporting the verdict
+    retrieved_sources: list[Citation] = Field(default_factory=list)  # what the mediator was shown
+    search_query: str = ""
 
 
 class DebateState(BaseModel):

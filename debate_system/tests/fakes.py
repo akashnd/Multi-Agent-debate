@@ -122,10 +122,9 @@ def install_fake_models() -> None:
     # Never touch the network for evidence either.
     import search.tavily as search_mod
 
-    search_mod.get_searcher.cache_clear()
-    search_mod.get_searcher = lambda: search_mod.EvidenceSearch.__new__(search_mod.EvidenceSearch)
-    stub = search_mod.get_searcher()
+    stub = search_mod.EvidenceSearch.__new__(search_mod.EvidenceSearch)
     stub.enabled = False
     stub.tool = None
+    search_mod.get_searcher = lambda s=stub: s  # idempotent: no cache_clear needed
     for module in (specialist_mod, mediator_mod):
         module.get_searcher = lambda s=stub: s
