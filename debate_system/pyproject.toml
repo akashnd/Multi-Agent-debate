@@ -1,0 +1,15 @@
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+# Prompt templates and LLM-visible field descriptions: wrapping would change model input.
+[tool.ruff.lint.per-file-ignores]
+"prompts/*.py" = ["E501"]
+"models/outputs.py" = ["E501"]
