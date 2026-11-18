@@ -201,6 +201,8 @@ def test_verdict_and_transcript_saved(graph_run) -> None:
     assert saved["topic"] == TOPIC
     assert len(saved["turns"]) == len(values["turns"])
     assert saved["final_verdict"]["verdict"] == verdict.verdict
+    assert verdict.winner in ("pro", "con", "draw")
+    assert saved["final_verdict"]["winner"] == verdict.winner
 
 
 def test_cli_driver_renders_and_produces_verdict() -> None:
@@ -219,7 +221,13 @@ def test_cli_driver_renders_and_produces_verdict() -> None:
 
     assert verdict is not None and verdict.verdict, "driver produced no verdict"
     rendered = sink.getvalue()
-    for expected in ("DEBATE BEGINS", "Ada Pro", "FINAL VERDICT", "Transcript saved"):
+    for expected in (
+        "DEBATE BEGINS",
+        "Ada Pro",
+        "FINAL VERDICT",
+        "Winner: PRO WINS",
+        "Transcript saved",
+    ):
         assert expected in rendered, f"display never rendered {expected!r}"
 
     saved = Path(runner._values()["transcript_path"])

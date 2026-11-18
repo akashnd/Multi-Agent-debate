@@ -124,6 +124,7 @@ def build_final_verdict(persona: AgentPersona, state: DebateState) -> FinalVerdi
         fatal_con_weaknesses=out.fatal_con_weaknesses,
         confidence_trajectory=out.confidence_trajectory,
         nuanced_conclusion=out.nuanced_conclusion,
+        winner=out.winner,
         verdict=out.verdict,
         citations=[Citation(**c.model_dump()) for c in out.citations],
         retrieved_sources=to_citations(results),

@@ -98,6 +98,7 @@ def fake_output(schema, prompt_text: str):
             fatal_con_weaknesses="no alternative",
             confidence_trajectory="flat",
             nuanced_conclusion="It depends.",
+            winner="pro",
             verdict="Narrow pro win.",
             citations=[],
         )

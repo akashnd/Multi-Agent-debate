@@ -344,8 +344,11 @@ class DebateDisplay:
         )
 
         # Final verdict
+        winner_style = {"pro": "green", "con": "red", "draw": "yellow"}[verdict.winner]
+        winner_label = "DRAW" if verdict.winner == "draw" else f"{verdict.winner.upper()} WINS"
         console.print(
             Panel(
+                f"[bold {winner_style}]Winner: {winner_label}[/bold {winner_style}]\n\n"
                 f"[bold]{verdict.verdict}[/bold]",
                 title="[bold yellow]VERDICT[/bold yellow]",
                 border_style="yellow",

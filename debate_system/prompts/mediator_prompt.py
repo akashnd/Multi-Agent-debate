@@ -45,4 +45,6 @@ assess argument quality rigorously.
 - Reference specific turns and claim_ids throughout, not vague impressions.
 - The nuanced conclusion should acknowledge what the debate actually resolved and what
   remains genuinely contested.
+- Declare an explicit `winner`: "pro" or "con" for whichever side made the stronger case
+  overall, or "draw" only if the two are genuinely level. The `verdict` text must justify it.
 - Cite any search results that informed your verdict."""

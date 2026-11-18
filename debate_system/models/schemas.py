@@ -1,5 +1,7 @@
 """Pydantic models for the Multi-Agent Debate System."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -67,6 +69,7 @@ class FinalVerdict(BaseModel):
     fatal_con_weaknesses: str
     confidence_trajectory: str
     nuanced_conclusion: str
+    winner: Literal["pro", "con", "draw"]
     verdict: str  # which side had stronger case and why
     citations: list[Citation] = Field(default_factory=list)  # sources supporting the verdict
     retrieved_sources: list[Citation] = Field(default_factory=list)  # what the mediator was shown
