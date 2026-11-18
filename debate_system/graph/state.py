@@ -100,6 +100,7 @@ class DebateGraphState(TypedDict, total=False):
 # Helpers
 # ──────────────────────────────────────────────────────────────────────────
 
+
 def specialists(state: DebateGraphState) -> list[AgentPersona]:
     return [a for a in state.get("agents", []) if a.side != "mediator"]
 

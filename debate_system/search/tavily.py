@@ -67,8 +67,7 @@ class EvidenceSearch:
         if not results:
             return "(No search results — no TAVILY_API_KEY set or search disabled.)"
         return "\n\n".join(
-            f"[{i}] {r.title}\n    URL: {r.url}\n    {r.content}"
-            for i, r in enumerate(results, 1)
+            f"[{i}] {r.title}\n    URL: {r.url}\n    {r.content}" for i, r in enumerate(results, 1)
         )
 
     def context_for(self, query: str, max_results: int | None = None) -> str:

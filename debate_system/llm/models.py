@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import sys
-from functools import lru_cache
+from functools import cache
 
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -39,7 +39,7 @@ def active_provider() -> str:
     return os.environ.get("LLM_PROVIDER", "anthropic").lower().strip()
 
 
-@lru_cache(maxsize=None)
+@cache
 def get_chat_model(
     max_tokens: int = 4096,
     temperature: float = MODEL_TEMPERATURE,

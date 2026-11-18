@@ -2,7 +2,7 @@
 
 import re
 
-from models.schemas import DebateTurn, Claim, MediatorSummary
+from models.schemas import Claim, DebateTurn, MediatorSummary
 
 
 def format_transcript(turns: list[DebateTurn]) -> str:
@@ -11,7 +11,8 @@ def format_transcript(turns: list[DebateTurn]) -> str:
     lines = []
     for t in turns:
         lines.append(
-            f"[Turn {t.turn_number}] {t.agent_name} ({t.agent_role}, {t.side.upper()}): {t.argument}"
+            f"[Turn {t.turn_number}] {t.agent_name} ({t.agent_role}, {t.side.upper()}): "
+            f"{t.argument}"
         )
     return "\n\n".join(lines)
 
@@ -22,9 +23,7 @@ def format_claim_ledger(claims: list[Claim]) -> str:
     lines = []
     for c in claims:
         status = "[REBUTTED]" if c.rebutted_by else "[STANDING]"
-        lines.append(
-            f"  {c.claim_id} {status} — {c.agent_name} ({c.side}): {c.content}"
-        )
+        lines.append(f"  {c.claim_id} {status} — {c.agent_name} ({c.side}): {c.content}")
     return "\n".join(lines)
 
 

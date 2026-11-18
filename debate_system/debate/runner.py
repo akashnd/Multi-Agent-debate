@@ -12,7 +12,8 @@ nothing in graph/ or agents/ would change.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 from langgraph.types import Command
 
@@ -55,7 +56,9 @@ class DebateRunner:
 
         try:
             while True:
-                pending = self._drain(self.graph.stream(payload, self.config, stream_mode="updates"))
+                pending = self._drain(
+                    self.graph.stream(payload, self.config, stream_mode="updates")
+                )
                 if pending is None:
                     break
 
@@ -147,9 +150,7 @@ class DebateRunner:
 
         if kind == "human_turn":
             state = self._debate_state()
-            agent = next(
-                (a for a in state.agents if a.name == payload.get("agent_name")), None
-            )
+            agent = next((a for a in state.agents if a.name == payload.get("agent_name")), None)
             if agent is not None:
                 state.current_turn = payload.get("turn_number", state.current_turn)
                 self.display.show_human_turn_context(agent, state)

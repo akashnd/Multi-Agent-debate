@@ -31,7 +31,9 @@ def get_int_input(prompt: str, default: int, min_val: int = 1, max_val: int = 10
             val = int(raw)
             if min_val <= val <= max_val:
                 return val
-            console.print(f"[yellow]Please enter a number between {min_val} and {max_val}.[/yellow]")
+            console.print(
+                f"[yellow]Please enter a number between {min_val} and {max_val}.[/yellow]"
+            )
         except ValueError:
             console.print("[yellow]Please enter a valid number.[/yellow]")
 
@@ -48,7 +50,9 @@ def maybe_human_participant() -> AgentPersona | None:
 
     name = input("Your name (shown in the transcript) [default: You]: ").strip() or "You"
     specialty = (
-        input("A short label for your angle/expertise (optional) [default: Human Participant]: ").strip()
+        input(
+            "A short label for your angle/expertise (optional) [default: Human Participant]: "
+        ).strip()
         or "Human Participant"
     )
 
@@ -77,7 +81,8 @@ def main():
     topic = input("Enter debate topic: ").strip()
     if not topic:
         console.print(
-            "[yellow]No topic entered. Using default: 'Social media does more harm than good'[/yellow]"
+            "[yellow]No topic entered. "
+            "Using default: 'Social media does more harm than good'[/yellow]"
         )
         topic = "Social media does more harm than good"
 
