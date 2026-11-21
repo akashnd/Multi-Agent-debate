@@ -1,19 +1,15 @@
 """Rich terminal UI for the Multi-Agent Debate System."""
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.progress import Progress, BarColumn, TextColumn
-from rich.text import Text
-from rich.rule import Rule
-from rich.columns import Columns
-from rich.padding import Padding
 from rich import box
-from rich.spinner import Spinner
+from rich.console import Console
 from rich.live import Live
+from rich.padding import Padding
+from rich.panel import Panel
+from rich.rule import Rule
+from rich.table import Table
 
-from models.schemas import DebateTurn, DebateState, AgentPersona, FinalVerdict, Claim
-from agents.utils import format_transcript, format_claim_ledger, get_last_mediator_summary
+from agents.utils import format_claim_ledger, format_transcript, get_last_mediator_summary
+from models.schemas import AgentPersona, Claim, DebateState, DebateTurn, FinalVerdict
 
 # Singleton console — never create multiple Console instances
 console = Console()
@@ -72,7 +68,9 @@ class DebateDisplay:
             elif agent.side == "mediator":
                 mediator_info = agent
 
-        console.print(Panel(pro_table, title="[bold green]PRO SIDE[/bold green]", border_style="green"))
+        console.print(
+            Panel(pro_table, title="[bold green]PRO SIDE[/bold green]", border_style="green")
+        )
         console.print(Panel(con_table, title="[bold red]CON SIDE[/bold red]", border_style="red"))
 
         if mediator_info:
@@ -129,7 +127,8 @@ class DebateDisplay:
         console.print()
         console.print(
             Rule(
-                f"[bold {color}]YOUR TURN — {agent.name} ({label}) | Turn {state.current_turn} of {state.total_turns}[/bold {color}]",
+                f"[bold {color}]YOUR TURN — {agent.name} ({label}) | "
+                f"Turn {state.current_turn} of {state.total_turns}[/bold {color}]",
                 style=color,
             )
         )
@@ -145,7 +144,9 @@ class DebateDisplay:
         console.print(
             Panel(
                 format_claim_ledger(state.claim_ledger),
-                title="[bold]Claim Ledger[/bold] [dim](standing claims are still open to rebut)[/dim]",
+                title=(
+                    "[bold]Claim Ledger[/bold] [dim](standing claims are still open to rebut)[/dim]"
+                ),
                 border_style="dim",
             )
         )
@@ -153,7 +154,11 @@ class DebateDisplay:
         summary = get_last_mediator_summary(state)
         if "No mediator summary" not in summary:
             console.print(
-                Panel(summary, title="[bold yellow]Mediator's Last Summary[/bold yellow]", border_style="yellow")
+                Panel(
+                    summary,
+                    title="[bold yellow]Mediator's Last Summary[/bold yellow]",
+                    border_style="yellow",
+                )
             )
 
         console.print()
@@ -281,7 +286,9 @@ class DebateDisplay:
 
             for score in verdict.argument_scorecard:
                 rating_str = "★" * score.defense_rating + "☆" * (5 - score.defense_rating)
-                rebutted_str = "[red]Yes[/red]" if score.successfully_rebutted else "[green]No[/green]"
+                rebutted_str = (
+                    "[red]Yes[/red]" if score.successfully_rebutted else "[green]No[/green]"
+                )
                 score_table.add_row(
                     score.claim_id,
                     score.claim_summary[:60] + ("..." if len(score.claim_summary) > 60 else ""),
@@ -296,7 +303,9 @@ class DebateDisplay:
         if verdict.strongest_pro_arguments:
             pro_args = "\n".join(f"  • {a}" for a in verdict.strongest_pro_arguments)
             console.print(
-                Panel(pro_args, title="[green]Strongest PRO Arguments[/green]", border_style="green")
+                Panel(
+                    pro_args, title="[green]Strongest PRO Arguments[/green]", border_style="green"
+                )
             )
 
         if verdict.strongest_con_arguments:
@@ -335,8 +344,11 @@ class DebateDisplay:
         )
 
         # Final verdict
+        winner_style = {"pro": "green", "con": "red", "draw": "yellow"}[verdict.winner]
+        winner_label = "DRAW" if verdict.winner == "draw" else f"{verdict.winner.upper()} WINS"
         console.print(
             Panel(
+                f"[bold {winner_style}]Winner: {winner_label}[/bold {winner_style}]\n\n"
                 f"[bold]{verdict.verdict}[/bold]",
                 title="[bold yellow]VERDICT[/bold yellow]",
                 border_style="yellow",

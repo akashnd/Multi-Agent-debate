@@ -23,7 +23,7 @@ from llm.models import get_chat_model
 from models.outputs import SpecialistTurnOutput
 from models.schemas import AgentPersona, Citation, Claim, DebateState, DebateTurn
 from prompts.specialist_prompt import SPECIALIST_SYSTEM, SPECIALIST_USER
-from search.tavily import get_searcher
+from search.tavily import get_searcher, to_citations
 
 SPECIALIST_PROMPT = ChatPromptTemplate.from_messages(
     [("system", SPECIALIST_SYSTEM), ("human", SPECIALIST_USER)]
@@ -41,7 +41,8 @@ def build_specialist_turn(
     turn_number: int,
 ) -> tuple[DebateTurn, list[Claim]]:
     """Generate one specialist turn. Returns (turn, claim_ledger_delta)."""
-    search_context = get_searcher().context_for(f"{state.topic} {agent.specialty}")
+    search_query = f"{state.topic} {agent.specialty}"
+    results, search_context = get_searcher().retrieve(search_query)
 
     out: SpecialistTurnOutput = specialist_chain().invoke(
         {
@@ -102,5 +103,7 @@ def build_specialist_turn(
         rebuttal_targets=valid_targets,
         confidence=max(0.0, min(1.0, float(out.confidence))),
         citations=[Citation(**c.model_dump()) for c in out.citations],
+        retrieved_sources=to_citations(results),
+        search_query=search_query,
     )
     return turn, ledger_delta

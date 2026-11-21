@@ -13,6 +13,8 @@ it before the answer fields, so it still acts as a scratchpad, and it works
 identically across Anthropic / OpenAI / Gemini.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from models.schemas import Citation, ClaimScore
@@ -103,6 +105,9 @@ class FinalVerdictOutput(BaseModel):
     )
     nuanced_conclusion: str = Field(
         description="3-4 paragraphs on what the debate resolved and what remains contested"
+    )
+    winner: Literal["pro", "con", "draw"] = Field(
+        description='Which side had the stronger case: "pro", "con", or "draw" if genuinely level'
     )
     verdict: str = Field(
         description="Which side had the stronger case, citing specific moments and claim_ids"

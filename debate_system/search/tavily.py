@@ -67,16 +67,29 @@ class EvidenceSearch:
         if not results:
             return "(No search results — no TAVILY_API_KEY set or search disabled.)"
         return "\n\n".join(
-            f"[{i}] {r.title}\n    URL: {r.url}\n    {r.content}"
-            for i, r in enumerate(results, 1)
+            f"[{i}] {r.title}\n    URL: {r.url}\n    {r.content}" for i, r in enumerate(results, 1)
         )
 
-    def context_for(self, query: str, max_results: int | None = None) -> str:
-        """search() + format_for_prompt() — what every node actually wants."""
+    def retrieve(
+        self, query: str, max_results: int | None = None
+    ) -> tuple[list[SearchResult], str]:
+        """search() + format_for_prompt(), keeping the raw results as a record."""
         from config import TAVILY_MAX_RESULTS
 
         n = TAVILY_MAX_RESULTS if max_results is None else max_results
-        return self.format_for_prompt(self.search(query, max_results=n))
+        results = self.search(query, max_results=n)
+        return results, self.format_for_prompt(results)
+
+    def context_for(self, query: str, max_results: int | None = None) -> str:
+        """Prompt text only. Kept for backward compatibility; prefer retrieve()."""
+        return self.retrieve(query, max_results)[1]
+
+
+def to_citations(results: list[SearchResult]) -> list:
+    """Convert search hits into Citation records (title, url, snippet=content)."""
+    from models.schemas import Citation
+
+    return [Citation(title=r.title, url=r.url, snippet=r.content) for r in results]
 
 
 # Name kept for backwards compatibility with the pre-LangGraph code.

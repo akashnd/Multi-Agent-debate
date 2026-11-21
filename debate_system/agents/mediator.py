@@ -23,7 +23,7 @@ from prompts.mediator_prompt import (
     MEDIATOR_SYSTEM,
     MEDIATOR_VERDICT_USER,
 )
-from search.tavily import get_searcher
+from search.tavily import get_searcher, to_citations
 
 SUMMARY_PROMPT = ChatPromptTemplate.from_messages(
     [("system", MEDIATOR_SYSTEM), ("human", MEDIATOR_SUMMARY_USER)]
@@ -58,7 +58,8 @@ def build_mediator_summary(
     turn_number: int,
 ) -> tuple[DebateTurn, MediatorSummary]:
     """Mid-debate checkpoint. Returns (turn for the record, structured summary)."""
-    search_context = get_searcher().context_for(f"{state.topic} research evidence")
+    search_query = f"{state.topic} research evidence"
+    results, search_context = get_searcher().retrieve(search_query)
 
     out: MediatorSummaryOutput = summary_chain().invoke(
         {
@@ -93,13 +94,16 @@ def build_mediator_summary(
         new_claims=[],
         rebuttal_targets=[],
         confidence=1.0,
+        retrieved_sources=to_citations(results),
+        search_query=search_query,
     )
     return turn, summary
 
 
 def build_final_verdict(persona: AgentPersona, state: DebateState) -> FinalVerdict:
     """Score the whole debate."""
-    search_context = get_searcher().context_for(f"{state.topic} expert analysis conclusion")
+    search_query = f"{state.topic} expert analysis conclusion"
+    results, search_context = get_searcher().retrieve(search_query)
 
     out: FinalVerdictOutput = verdict_chain().invoke(
         {
@@ -120,6 +124,9 @@ def build_final_verdict(persona: AgentPersona, state: DebateState) -> FinalVerdi
         fatal_con_weaknesses=out.fatal_con_weaknesses,
         confidence_trajectory=out.confidence_trajectory,
         nuanced_conclusion=out.nuanced_conclusion,
+        winner=out.winner,
         verdict=out.verdict,
         citations=[Citation(**c.model_dump()) for c in out.citations],
+        retrieved_sources=to_citations(results),
+        search_query=search_query,
     )

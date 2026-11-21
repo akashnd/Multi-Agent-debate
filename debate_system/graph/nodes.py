@@ -36,6 +36,7 @@ TRANSCRIPT_DIR = Path(__file__).resolve().parent.parent / "transcripts"
 # Cast
 # ──────────────────────────────────────────────────────────────────────────
 
+
 def decompose_node(state: DebateGraphState) -> dict:
     """Invent the specialists, then size the debate around them."""
     personas = generate_personas(state["topic"], state["k_specialists"])
@@ -83,6 +84,7 @@ def approve_personas_node(state: DebateGraphState) -> dict:
 # ──────────────────────────────────────────────────────────────────────────
 # Supervisor — the only node that decides anything
 # ──────────────────────────────────────────────────────────────────────────
+
 
 def supervisor_node(state: DebateGraphState) -> dict:
     """Decide what happens next: a specialist, the human, the mediator, or the verdict.
@@ -154,6 +156,7 @@ def route_from_supervisor(state: DebateGraphState) -> str:
 # Speaking nodes
 # ──────────────────────────────────────────────────────────────────────────
 
+
 def specialist_node(state: DebateGraphState) -> dict:
     agent = agent_by_name(state, state.get("next_speaker"))
     if agent is None:
@@ -203,9 +206,7 @@ def human_node(state: DebateGraphState) -> dict:
 
 def mediator_node(state: DebateGraphState) -> dict:
     turn_number = state.get("current_turn", 0) + 1
-    turn, summary = build_mediator_summary(
-        mediator_of(state), to_debate_state(state), turn_number
-    )
+    turn, summary = build_mediator_summary(mediator_of(state), to_debate_state(state), turn_number)
     return {
         "turns": [turn],
         "mediator_summaries": [summary],
@@ -221,6 +222,7 @@ def verdict_node(state: DebateGraphState) -> dict:
 # ──────────────────────────────────────────────────────────────────────────
 # Persistence
 # ──────────────────────────────────────────────────────────────────────────
+
 
 def persist_node(state: DebateGraphState) -> dict:
     return {"transcript_path": save_transcript(state)}
